@@ -2,7 +2,8 @@ import { GoogleGenAI } from "@google/genai";
 
 // Use VITE_GEMINI_API_KEY. 
 // We avoid process.env here to prevent "process is not defined" errors in browser environments (Vercel).
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+// FALLBACK: Hardcoded key for Vercel deployment where .env might be ignored
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "AIzaSyCehHg5lKNZVOGjHhpDTLlYwWHee4q5Sws";
 
 if (!apiKey) {
   console.error("VITE_GEMINI_API_KEY is missing. AI features will not work.");

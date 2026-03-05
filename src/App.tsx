@@ -192,7 +192,7 @@ function App() {
         </div>
       )}
 
-      <div className="relative z-10 container mx-auto px-4 py-6 h-screen flex flex-col">
+      <div className="relative z-10 container mx-auto px-4 py-6 flex flex-col lg:h-screen min-h-screen">
         {/* Header */}
         <header className="mb-8 text-center">
           <div className="flex items-center justify-center gap-3 mb-2">
@@ -208,7 +208,7 @@ function App() {
         <QuickLog onAiAction={handleAiAction} />
 
         {/* Main Grid */}
-        <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-6 pb-16 lg:pb-6">
+        <div className="flex-1 lg:min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-6 pb-24 lg:pb-6">
           <StudyColumn 
             tasks={data.studies} 
             onAddTask={(text, priority) => addStudyTask(text, priority)} 

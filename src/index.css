@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+@layer base {
+  html, body {
+    background-color: #0f172a; /* Match the app background to prevent white flashes */
+    color: white;
+  }
+}
+
 @layer utilities {
   .custom-scrollbar::-webkit-scrollbar {
     width: 6px;
