@@ -23,8 +23,32 @@ export const QuickLog: React.FC<QuickLogProps> = ({ onAiAction }) => {
       }
     } catch (error: any) {
       console.error("AI Error:", error);
-      // Pass null result with raw input and error message to trigger fallback in App.tsx
-      const msg = error?.message || "Unknown error";
+      
+      let msg = error?.message || "Unknown error";
+      
+      // Try to parse JSON error message if present
+      if (typeof msg === 'string' && msg.includes('{')) {
+        try {
+          // Extract JSON part if mixed with text
+          const jsonMatch = msg.match(/\{.*\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            if (parsed.error?.message) {
+              msg = parsed.error.message;
+            }
+          }
+        } catch (e) {
+          // Ignore parsing error
+        }
+      }
+
+      // User-friendly overrides
+      if (msg.includes("Quota exceeded") || msg.includes("429")) {
+        msg = "Daily limit reached. Please try again later.";
+      } else if (msg.includes("API key")) {
+        msg = "Invalid API Key. Please check settings.";
+      }
+
       onAiAction(null, input, `AI Error: ${msg}`);
       setInput('');
     } finally {
