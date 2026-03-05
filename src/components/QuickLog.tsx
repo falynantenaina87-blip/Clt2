@@ -3,7 +3,7 @@ import { Sparkles, Loader2, ArrowRight } from 'lucide-react';
 import { parseLogInput } from '../services/aiService';
 
 interface QuickLogProps {
-  onAiAction: (action: any, rawInput?: string) => void;
+  onAiAction: (action: any, rawInput?: string, errorMessage?: string) => void;
 }
 
 export const QuickLog: React.FC<QuickLogProps> = ({ onAiAction }) => {
@@ -21,10 +21,11 @@ export const QuickLog: React.FC<QuickLogProps> = ({ onAiAction }) => {
         onAiAction(result, input);
         setInput('');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("AI Error:", error);
-      // Pass null result with raw input to trigger fallback in App.tsx
-      onAiAction(null, input);
+      // Pass null result with raw input and error message to trigger fallback in App.tsx
+      const msg = error?.message || "Unknown error";
+      onAiAction(null, input, `AI Error: ${msg}`);
       setInput('');
     } finally {
       setIsLoading(false);

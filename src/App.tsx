@@ -126,13 +126,13 @@ function App() {
   };
 
   // --- AI Action Handler ---
-  const handleAiAction = (result: any, rawInput?: string) => {
+  const handleAiAction = (result: any, rawInput?: string, errorMessage?: string) => {
     // Fallback if result is null (error case handled in QuickLog but passed here if needed)
     if (!result && rawInput) {
        const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
        const newNote = `\n[${timestamp}] (Unclassified) ${rawInput}`;
        updateNotes(data.hobbies.notes + newNote);
-       setToastMessage("AI unavailable. Added to Notes.");
+       setToastMessage(errorMessage || "AI unavailable. Added to Notes.");
        return;
     }
 
