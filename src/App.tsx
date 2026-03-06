@@ -1,12 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { AppData, initialData, Priority, Intensity, validateAppData } from './types';
-import { StudyColumn } from './components/StudyColumn';
-import { SportColumn } from './components/SportColumn';
-import { HobbyColumn } from './components/HobbyColumn';
-import { QuickLog } from './components/QuickLog';
-import { DataControls } from './components/DataControls';
-import { LayoutGrid, AlertCircle, Sparkles, X, Volume2, Loader2, Square } from 'lucide-react';
-import { getDateFromText, generateDailySummary, generateCoachAudio, playCoachAudio, stopCoachAudio } from './services/aiService';
+import { AppData, initialData, Priority, validateAppData } from './types';
+import { AlertCircle, Sparkles, X, Loader2 } from 'lucide-react';
+import { generateDailySummary, generateCoachAudio, playCoachAudio, stopCoachAudio } from './services/aiService';
 
 function App() {
   const [data, setData] = useState<AppData>(() => {
@@ -103,10 +98,6 @@ function App() {
     }
   };
 
-  const handleImport = (newData: AppData) => {
-    setData(validateAppData(newData));
-  };
-
   // --- Studies Handlers ---
   const addStudyTask = (text: string, priority: Priority, date?: number) => {
     setData(prev => ({
@@ -132,116 +123,248 @@ function App() {
     }));
   };
 
-  // --- Sport Handlers ---
-  const addWorkoutLog = (log: { exercise: string; details: string; intensity: Intensity }, date?: number) => {
-    setData(prev => ({
-      ...prev,
-      sport: [
-        { id: crypto.randomUUID(), ...log, date: date || Date.now() },
-        ...prev.sport
-      ]
-    }));
-  };
+  const [newTaskText, setNewTaskText] = useState('');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'quiz'>('dashboard');
 
-  const deleteWorkoutLog = (id: string) => {
-    setData(prev => ({
-      ...prev,
-      sport: prev.sport.filter(l => l.id !== id)
-    }));
-  };
+  // --- Quiz State ---
+  const [quizQuestions, setQuizQuestions] = useState<any[]>([]);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
+  const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
+  const [score, setScore] = useState(0);
+  const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
+  const [quizFinished, setQuizFinished] = useState(false);
 
-  // --- Hobbies Handlers ---
-  const updateNotes = (notes: string) => {
-    setData(prev => ({
-      ...prev,
-      hobbies: { ...prev.hobbies, notes }
-    }));
-  };
-
-  const addWishlistItem = (text: string) => {
-    setData(prev => ({
-      ...prev,
-      hobbies: {
-        ...prev.hobbies,
-        wishlist: [...prev.hobbies.wishlist, { id: crypto.randomUUID(), text, completed: false }]
-      }
-    }));
-  };
-
-  const toggleWishlistItem = (id: string) => {
-    setData(prev => ({
-      ...prev,
-      hobbies: {
-        ...prev.hobbies,
-        wishlist: prev.hobbies.wishlist.map(w => w.id === id ? { ...w, completed: !w.completed } : w)
-      }
-    }));
-  };
-
-  const deleteWishlistItem = (id: string) => {
-    setData(prev => ({
-      ...prev,
-      hobbies: {
-        ...prev.hobbies,
-        wishlist: prev.hobbies.wishlist.filter(w => w.id !== id)
-      }
-    }));
-  };
-
-  // --- AI Action Handler ---
-  const handleAiAction = (result: any, rawInput?: string, errorMessage?: string) => {
-    // Fallback if result is null (error case handled in QuickLog but passed here if needed)
-    if (!result && rawInput) {
-       const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-       const newNote = `\n[${timestamp}] (Unclassified) ${rawInput}`;
-       updateNotes(data.hobbies.notes + newNote);
-       setToastMessage(errorMessage || "AI unavailable. Added to Notes.");
-       return;
+  const playQuestionAudio = async (questionObj: any) => {
+    try {
+      const textToRead = `${questionObj.question}. Options are: A. ${questionObj.options[0]}, B. ${questionObj.options[1]}, C. ${questionObj.options[2]}, D. ${questionObj.options[3]}`;
+      const audioBase64 = await generateCoachAudio(textToRead);
+      setIsAudioPlaying(true);
+      playCoachAudio(audioBase64, () => setIsAudioPlaying(false));
+    } catch (error) {
+      console.error("Audio failed", error);
     }
+  };
 
-    const { category, data: itemData } = result;
-    const date = rawInput ? getDateFromText(rawInput) : Date.now();
+  const handleStartQuiz = async () => {
+    const activeTasks = data.studies.filter(t => !t.completed).map(t => t.text).join(", ");
+    const topic = activeTasks || "General Knowledge";
+    
+    setCurrentView('quiz');
+    setIsGeneratingQuiz(true);
+    setQuizQuestions([]);
+    setCurrentQuestionIndex(0);
+    setSelectedAnswer(null);
+    setIsCorrect(null);
+    setScore(0);
+    setQuizFinished(false);
 
-    if (category === 'studies') {
-      addStudyTask(itemData.text, itemData.priority || 'medium', date);
-    } else if (category === 'sport') {
-      addWorkoutLog({
-        exercise: itemData.exercise,
-        details: itemData.details,
-        intensity: itemData.intensity || 'medium'
-      }, date);
-    } else if (category === 'hobbies') {
-      if (itemData.type === 'wishlist') {
-        addWishlistItem(itemData.text);
+    try {
+      const { generateQuiz } = await import('./services/aiService');
+      const questions = await generateQuiz(topic);
+      setQuizQuestions(questions);
+      if (questions.length > 0) {
+        playQuestionAudio(questions[0]);
+      }
+    } catch (error) {
+      setToastMessage("Failed to generate quiz.");
+      setCurrentView('dashboard');
+    } finally {
+      setIsGeneratingQuiz(false);
+    }
+  };
+
+  const handleAnswerSelect = (index: number) => {
+    if (selectedAnswer !== null) return;
+    
+    setSelectedAnswer(index);
+    const correct = index === quizQuestions[currentQuestionIndex].correctAnswerIndex;
+    setIsCorrect(correct);
+    if (correct) setScore(s => s + 1);
+
+    setTimeout(() => {
+      if (currentQuestionIndex < quizQuestions.length - 1) {
+        setCurrentQuestionIndex(i => i + 1);
+        setSelectedAnswer(null);
+        setIsCorrect(null);
+        playQuestionAudio(quizQuestions[currentQuestionIndex + 1]);
       } else {
-        // Append to notes with a timestamp
-        const timestamp = new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const newNote = `\n[${timestamp}] ${itemData.text}`;
-        updateNotes(data.hobbies.notes + newNote);
+        setQuizFinished(true);
       }
+    }, 2000);
+  };
+
+  const handleCommandSubmit = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && newTaskText.trim()) {
+      addStudyTask(newTaskText.trim(), 'medium');
+      setNewTaskText('');
     }
   };
 
-  // --- Quiz Handlers ---
-  const saveQuiz = (topic: string, questions: any[]) => {
-    setData(prev => ({
-      ...prev,
-      savedQuizzes: [
-        { id: crypto.randomUUID(), topic, questions, date: Date.now() },
-        ...(prev.savedQuizzes || [])
-      ]
-    }));
-  };
+  const completedTasks = data.studies.filter(t => t.completed).length;
+  const totalTasks = data.studies.length;
+  const performanceScore = totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
 
-  const deleteQuiz = (id: string) => {
-    setData(prev => ({
-      ...prev,
-      savedQuizzes: (prev.savedQuizzes || []).filter(q => q.id !== id)
-    }));
-  };
+  if (currentView === 'quiz') {
+    return (
+      <div className="dark bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen flex flex-col font-display selection:bg-primary/30">
+        {/* Top App Bar (Header) */}
+        <header className="flex items-center bg-transparent p-6 justify-between">
+          <div 
+            onClick={() => setCurrentView('dashboard')}
+            className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition-colors"
+          >
+            <span className="material-symbols-outlined text-slate-600 dark:text-slate-400">close</span>
+          </div>
+          <div className="flex flex-col items-center">
+            <span className="text-[10px] uppercase tracking-[0.2em] text-primary font-bold">Core Study</span>
+            <h2 className="text-slate-900 dark:text-slate-100 text-sm font-semibold leading-tight">Focus Mode</h2>
+          </div>
+          <div className="flex size-10 items-center justify-end">
+            <button 
+              onClick={() => {
+                if (quizQuestions.length > 0 && currentQuestionIndex < quizQuestions.length) {
+                  playQuestionAudio(quizQuestions[currentQuestionIndex]);
+                }
+              }}
+              className="flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-800 p-2 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            >
+              <span className="material-symbols-outlined text-primary">volume_up</span>
+            </button>
+          </div>
+        </header>
+
+        {/* Main Content (Centered Question) */}
+        <main className="flex-1 flex flex-col justify-center px-6 max-w-xl mx-auto w-full">
+          {isGeneratingQuiz ? (
+            <div className="flex flex-col items-center justify-center gap-4">
+              <Loader2 size={48} className="animate-spin text-primary" />
+              <p className="text-slate-500 font-medium">Generating your personalized quiz...</p>
+            </div>
+          ) : quizFinished ? (
+            <div className="flex flex-col items-center justify-center gap-6 text-center">
+              <h1 className="text-4xl font-bold text-slate-900 dark:text-slate-100">Quiz Complete!</h1>
+              <p className="text-xl text-slate-600 dark:text-slate-400">You scored {score} out of {quizQuestions.length}</p>
+              <button 
+                onClick={() => setCurrentView('dashboard')}
+                className="mt-8 px-8 py-4 bg-primary text-white rounded-xl font-semibold hover:bg-primary/90 transition-colors"
+              >
+                Return to Dashboard
+              </button>
+            </div>
+          ) : quizQuestions.length > 0 ? (
+            <>
+              {/* AI Reading Indicator */}
+              <div className={`flex items-center justify-center gap-2 mb-8 ${isAudioPlaying ? 'animate-pulse opacity-100' : 'opacity-0'} transition-opacity`}>
+                <div className="flex gap-0.5 items-center h-4">
+                  <div className="w-0.5 h-2 bg-primary rounded-full"></div>
+                  <div className="w-0.5 h-4 bg-primary rounded-full"></div>
+                  <div className="w-0.5 h-3 bg-primary rounded-full"></div>
+                  <div className="w-0.5 h-4 bg-primary rounded-full"></div>
+                  <div className="w-0.5 h-2 bg-primary rounded-full"></div>
+                </div>
+                <p className="text-primary text-xs font-medium tracking-wide">AI VOICE ACTIVE</p>
+              </div>
+
+              {/* Question Text */}
+              <h1 className="text-slate-900 dark:text-slate-100 tracking-tight text-3xl md:text-4xl font-bold leading-tight text-center mb-12">
+                {quizQuestions[currentQuestionIndex].question}
+              </h1>
+
+              {/* Answer Buttons */}
+              <div className="flex flex-col gap-3 w-full">
+                {quizQuestions[currentQuestionIndex].options.map((option: string, index: number) => {
+                  const isSelected = selectedAnswer === index;
+                  const isCorrectAnswer = index === quizQuestions[currentQuestionIndex].correctAnswerIndex;
+                  const showCorrect = selectedAnswer !== null && isCorrectAnswer;
+                  const showIncorrect = selectedAnswer !== null && isSelected && !isCorrectAnswer;
+                  
+                  let buttonClass = "group flex items-center justify-between w-full px-6 py-5 bg-white dark:bg-slate-900/50 border rounded-xl transition-all duration-200 shadow-sm ";
+                  let textClass = "font-medium transition-colors ";
+                  let iconClass = "text-xs font-mono ";
+                  let iconContent = String.fromCharCode(65 + index); // A, B, C, D
+
+                  if (showCorrect) {
+                    buttonClass += "border-green-500 bg-green-50 dark:bg-green-500/10 shadow-[0_0_15px_rgba(34,197,94,0.2)]";
+                    textClass += "text-green-700 dark:text-green-400 font-semibold";
+                    iconClass += "material-symbols-outlined text-green-500 text-sm";
+                    iconContent = "check_circle";
+                  } else if (showIncorrect) {
+                    buttonClass += "border-red-500 bg-red-50 dark:bg-red-500/10";
+                    textClass += "text-red-700 dark:text-red-400 font-semibold";
+                    iconClass += "material-symbols-outlined text-red-500 text-sm";
+                    iconContent = "cancel";
+                  } else if (selectedAnswer === null) {
+                    buttonClass += "border-slate-200 dark:border-slate-800 hover:border-primary dark:hover:border-primary/50 active:scale-[0.98]";
+                    textClass += "text-slate-700 dark:text-slate-300 group-hover:text-primary";
+                    iconClass += "text-slate-400";
+                  } else {
+                    buttonClass += "border-slate-200 dark:border-slate-800 opacity-50";
+                    textClass += "text-slate-500";
+                    iconClass += "text-slate-400";
+                  }
+
+                  return (
+                    <button 
+                      key={index}
+                      onClick={() => handleAnswerSelect(index)}
+                      disabled={selectedAnswer !== null}
+                      className={buttonClass}
+                    >
+                      <span className={textClass}>{option}</span>
+                      <span className={iconClass}>{iconContent}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-col items-center justify-center gap-6 text-center">
+              <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Ready to test your knowledge?</h1>
+              <p className="text-slate-600 dark:text-slate-400">We'll generate a quiz based on your active study tasks.</p>
+              <button 
+                onClick={handleStartQuiz}
+                className="mt-4 px-8 py-4 bg-primary text-white rounded-xl font-semibold hover:bg-primary/90 transition-colors"
+              >
+                Start Quiz
+              </button>
+            </div>
+          )}
+        </main>
+
+        {/* Bottom Footer (Progress) */}
+        {!isGeneratingQuiz && !quizFinished && quizQuestions.length > 0 && (
+          <footer className="p-8 max-w-xl mx-auto w-full">
+            <div className="flex flex-col gap-4">
+              <div className="flex items-end justify-between">
+                <div className="flex flex-col">
+                  <span className="text-slate-400 dark:text-slate-500 text-xs font-medium uppercase tracking-widest mb-1">Current Progress</span>
+                  <p className="text-slate-900 dark:text-slate-100 text-lg font-bold tabular-nums">
+                    Question {(currentQuestionIndex + 1).toString().padStart(2, '0')} <span className="text-slate-400 font-normal">/ {quizQuestions.length.toString().padStart(2, '0')}</span>
+                  </p>
+                </div>
+                <p className="text-slate-400 dark:text-slate-500 text-xs font-medium italic">
+                  {quizQuestions.length - currentQuestionIndex - 1} remaining
+                </p>
+              </div>
+              {/* Linear style progress bar */}
+              <div className="relative h-1.5 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                <div 
+                  className="absolute top-0 left-0 h-full bg-primary rounded-full transition-all duration-500" 
+                  style={{ width: `${((currentQuestionIndex) / quizQuestions.length) * 100}%` }}
+                ></div>
+              </div>
+            </div>
+          </footer>
+        )}
+        {/* Bottom Safe Area Spacer */}
+        <div className="h-6 w-full"></div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-[#0f172a] text-white font-sans selection:bg-indigo-500/30">
+    <div className="dark bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen flex flex-col font-display">
       {/* Splash Screen */}
       {showSplash && (
         <div className={`fixed inset-0 z-[9999] bg-[#0f172a] flex flex-col items-center justify-center transition-opacity duration-500 ${isFading ? 'opacity-0' : 'opacity-100'}`}>
@@ -264,18 +387,11 @@ function App() {
                 <Sparkles size={40} className="text-indigo-400" />
               </div>
             </div>
-            <h1 className="text-3xl font-bold text-white tracking-widest">CORE LIFE</h1>
+            <h1 className="text-3xl font-bold text-white tracking-widest">CORE STUDY</h1>
             <p className="text-indigo-400 mt-2 text-sm tracking-widest uppercase">Tracker</p>
           </div>
         </div>
       )}
-
-      {/* Background Gradients */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-900/20 rounded-full blur-[120px]"></div>
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-rose-900/20 rounded-full blur-[120px]"></div>
-        <div className="absolute top-[20%] right-[20%] w-[30%] h-[30%] bg-sky-900/20 rounded-full blur-[120px]"></div>
-      </div>
 
       {/* Toast Notification */}
       {toastMessage && (
@@ -285,121 +401,182 @@ function App() {
         </div>
       )}
 
-      <div className="relative z-10 container mx-auto px-4 py-6 flex flex-col lg:h-screen min-h-screen">
-        {/* Header */}
-        <header className="mb-8 text-center relative">
-          <div className="flex items-center justify-center gap-3 mb-2">
-            <LayoutGrid className="text-indigo-400" size={32} />
-            <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-white/60">
-              Core Life Tracker
-            </h1>
+      {/* Top Navigation Bar */}
+      <header className="sticky top-0 z-50 bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md border-b border-slate-200 dark:border-white/5 px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="size-8 rounded-lg bg-primary flex items-center justify-center text-white">
+            <span className="material-symbols-outlined text-[20px]">terminal</span>
           </div>
-          <p className="text-white/40 text-sm">Organize your life with AI-powered precision</p>
-          
-          <button 
-            onClick={handleGetCoachSummary}
-            className="absolute right-0 top-0 hidden md:flex items-center gap-2 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 px-4 py-2 rounded-full transition-colors text-sm font-medium"
-          >
-            <Sparkles size={16} />
-            Bilan IA
-          </button>
-          
-          {/* Mobile AI Coach Button */}
-          <button 
-            onClick={handleGetCoachSummary}
-            className="md:hidden mt-4 mx-auto flex items-center gap-2 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 px-4 py-2 rounded-full transition-colors text-sm font-medium"
-          >
-            <Sparkles size={16} />
-            Bilan IA
-          </button>
-        </header>
-
-        {/* Quick Log */}
-        <QuickLog onAiAction={handleAiAction} />
-
-        {/* Main Grid */}
-        <div className="flex-1 lg:min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-6 pb-24 lg:pb-6">
-          <StudyColumn 
-            tasks={data.studies} 
-            savedQuizzes={data.savedQuizzes || []}
-            onAddTask={(text, priority) => addStudyTask(text, priority)} 
-            onToggleTask={toggleStudyTask} 
-            onDeleteTask={deleteStudyTask} 
-            onSaveQuiz={saveQuiz}
-            onDeleteQuiz={deleteQuiz}
-          />
-          <SportColumn 
-            logs={data.sport} 
-            onAddLog={(log) => addWorkoutLog(log)} 
-            onDeleteLog={deleteWorkoutLog} 
-          />
-          <HobbyColumn 
-            data={data.hobbies} 
-            onUpdateNotes={updateNotes} 
-            onAddWishlistItem={addWishlistItem} 
-            onToggleWishlistItem={toggleWishlistItem} 
-            onDeleteWishlistItem={deleteWishlistItem} 
-          />
+          <h1 className="text-base font-semibold tracking-tight">Core Study</h1>
         </div>
-      </div>
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={() => setToastMessage("No new notifications")}
+            className="text-slate-500 dark:text-slate-400 hover:text-primary transition-colors"
+          >
+            <span className="material-symbols-outlined">notifications</span>
+          </button>
+          <div 
+            onClick={() => setToastMessage("Profile settings coming soon")}
+            className="size-8 rounded-full border border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-slate-800 overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
+          >
+            <img alt="User avatar" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCljjx9FRyvaKbzwNsdNjf_nujDPlLTHDyHyAdOxOPYTrZ-gg1ahfFLSy2fB6NDkDaEoxxkKcFQ2sKAr4W8FpVsrtrYoGn3psI6TcLHT1jOGXQw2ZRgN8hKL-BDaY5uyGNWFORcXSF9AP9fWlIhRN1MUD0IisAkIbLhnVsyYaijMsVEl9cHGT-Xj3l4cYDHFr34y3pT8EtwuB7J3JDOozNJb52Z3mu9fHp7OxsKdLjFf0CTBJh40HwsfgHXgvx1b6uyCyL8L3LtOk8" />
+          </div>
+        </div>
+      </header>
 
-      <DataControls data={data} onImport={handleImport} />
+      <main className="flex-1 overflow-y-auto px-4 py-4 space-y-6 custom-scrollbar">
+        {/* Command Input Section */}
+        <section className="relative">
+          <div className="flex items-center gap-2 bg-slate-200/50 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-xl px-4 py-3 focus-within:ring-1 focus-within:ring-primary/50 transition-all">
+            <span className="material-symbols-outlined text-slate-400 dark:text-slate-500 text-[20px]">keyboard_command_key</span>
+            <input 
+              type="text"
+              value={newTaskText}
+              onChange={(e) => setNewTaskText(e.target.value)}
+              onKeyDown={handleCommandSubmit}
+              className="bg-transparent border-none focus:ring-0 text-sm w-full placeholder:text-slate-400 dark:placeholder:text-slate-600 outline-none" 
+              placeholder="Type a command or task and press Enter..." 
+            />
+            <span className="text-[10px] font-mono text-slate-400 dark:text-slate-600 border border-slate-300 dark:border-white/10 px-1.5 py-0.5 rounded uppercase">K</span>
+          </div>
+        </section>
 
-      {/* AI Coach Modal */}
-      {isCoachModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-[#1e293b] border border-white/10 rounded-2xl w-full max-w-md p-6 shadow-2xl relative animate-in fade-in zoom-in-95">
-            <button 
-              onClick={() => setIsCoachModalOpen(false)}
-              className="absolute top-4 right-4 text-white/50 hover:text-white transition-colors"
-            >
-              <X size={20} />
-            </button>
-            
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400">
-                <Sparkles size={20} />
-              </div>
-              <h2 className="text-xl font-bold text-white">Ton Coach IA</h2>
+        {/* Task Manager Bento Box */}
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">Active Tasks</h2>
+          </div>
+          <div className="bg-white dark:bg-white/[0.02] border border-slate-200 dark:border-white/5 rounded-xl overflow-hidden">
+            <div className="divide-y divide-slate-100 dark:divide-white/5 max-h-[300px] overflow-y-auto custom-scrollbar">
+              {data.studies.length === 0 ? (
+                <div className="p-4 text-center text-sm text-slate-500">No active tasks. Add one above!</div>
+              ) : (
+                data.studies.map(task => (
+                  <div key={task.id} className="flex items-center gap-3 p-4 hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors group">
+                    <input 
+                      type="checkbox" 
+                      checked={task.completed}
+                      onChange={() => toggleStudyTask(task.id)}
+                      className="h-4 w-4 rounded-sm border-slate-300 dark:border-white/20 bg-transparent text-primary focus:ring-0 focus:ring-offset-0 cursor-pointer" 
+                    />
+                    <div className="flex-1">
+                      <p className={`text-sm font-medium ${task.completed ? 'line-through text-slate-500' : ''}`}>
+                        {task.text}
+                      </p>
+                    </div>
+                    <button onClick={() => deleteStudyTask(task.id)} className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-red-500 transition-opacity">
+                      <X size={16} />
+                    </button>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                      task.priority === 'high' ? 'bg-red-500/10 text-red-500' :
+                      task.priority === 'medium' ? 'bg-primary/10 text-primary' :
+                      'bg-slate-500/10 text-slate-500'
+                    }`}>
+                      {task.priority === 'high' ? 'High' : task.priority === 'medium' ? 'Med' : 'Low'}
+                    </span>
+                  </div>
+                ))
+              )}
             </div>
+          </div>
+        </section>
 
-            {isGeneratingCoach ? (
-              <div className="flex flex-col items-center justify-center py-8 gap-4">
-                <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
-                <p className="text-sm text-indigo-300 animate-pulse">Analyse de ta journée...</p>
-              </div>
-            ) : (
-              <div className="text-white/90 leading-relaxed text-lg">
-                {coachMessage}
-              </div>
-            )}
-            
-            {!isGeneratingCoach && coachMessage && (
-              <div className="mt-8 flex flex-col gap-3">
-                <button 
-                  onClick={handlePlayAudio}
-                  disabled={isAudioLoading}
-                  className="w-full flex items-center justify-center gap-2 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 font-medium py-3 rounded-xl transition-colors"
-                >
-                  {isAudioLoading ? (
-                    <><Loader2 size={18} className="animate-spin" /> Génération de la voix...</>
-                  ) : isAudioPlaying ? (
-                    <><Square size={18} className="fill-current" /> Arrêter la lecture</>
-                  ) : (
-                    <><Volume2 size={18} /> Écouter le bilan</>
-                  )}
-                </button>
-                <button 
-                  onClick={() => setIsCoachModalOpen(false)}
-                  className="w-full bg-white/10 hover:bg-white/20 text-white font-medium py-3 rounded-xl transition-colors"
-                >
-                  Fermer
-                </button>
-              </div>
-            )}
+        {/* Metrics & AI Coach Grid */}
+        <div className="bento-grid">
+          {/* Study Performance */}
+          <div className="bg-white dark:bg-white/[0.02] border border-slate-200 dark:border-white/5 rounded-xl p-4 space-y-3">
+            <h3 className="text-xs font-semibold text-slate-400 dark:text-slate-500">Performance</h3>
+            <div className="flex items-end gap-1.5 h-16">
+              <div className="flex-1 bg-primary/20 rounded-t-sm h-[40%]"></div>
+              <div className="flex-1 bg-primary/40 rounded-t-sm h-[70%]"></div>
+              <div className="flex-1 bg-primary rounded-t-sm h-[90%]"></div>
+              <div className="flex-1 bg-primary/60 rounded-t-sm h-[55%]"></div>
+            </div>
+            <div>
+              <p className="text-2xl font-bold tracking-tight">{performanceScore}%</p>
+              <p className="text-[10px] text-slate-400">Completion rate</p>
+            </div>
+          </div>
+
+          {/* Start Quiz */}
+          <div className="bg-white dark:bg-white/[0.02] border border-slate-200 dark:border-white/5 rounded-xl p-4 flex flex-col justify-between">
+            <div className="flex justify-between items-start">
+              <h3 className="text-xs font-semibold text-slate-400 dark:text-slate-500">Test Knowledge</h3>
+              <span className="material-symbols-outlined text-[18px] text-primary">quiz</span>
+            </div>
+            <div className="py-2">
+              <p className="text-2xl font-bold font-mono">Quiz</p>
+              <p className="text-[10px] text-slate-400 uppercase">AI Generated</p>
+            </div>
+            <button 
+              onClick={handleStartQuiz}
+              className="w-full py-1.5 bg-primary text-white rounded-lg text-xs font-semibold hover:bg-primary/90 transition-colors"
+            >
+              Start
+            </button>
           </div>
         </div>
-      )}
+
+        {/* AI Coach Section */}
+        <section className="bg-primary/5 dark:bg-primary/10 border border-primary/20 rounded-xl p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-primary text-[20px]">auto_awesome</span>
+              <h3 className="text-sm font-semibold text-primary">AI Coach</h3>
+            </div>
+            <div className="flex gap-2">
+              <button 
+                onClick={handleGetCoachSummary}
+                disabled={isGeneratingCoach}
+                className="size-8 rounded-full bg-primary/20 text-primary flex items-center justify-center hover:bg-primary/30 transition-colors disabled:opacity-50"
+              >
+                <span className={`material-symbols-outlined text-[18px] ${isGeneratingCoach ? 'animate-spin' : ''}`}>
+                  {isGeneratingCoach ? 'refresh' : 'chat'}
+                </span>
+              </button>
+              <button 
+                onClick={handlePlayAudio}
+                disabled={!coachMessage || isAudioLoading}
+                className="size-8 rounded-full bg-primary text-white flex items-center justify-center hover:scale-105 transition-transform disabled:opacity-50 disabled:hover:scale-100"
+              >
+                {isAudioLoading ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <span className="material-symbols-outlined text-[18px]">
+                    {isAudioPlaying ? 'stop' : 'play_arrow'}
+                  </span>
+                )}
+              </button>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300 italic">
+              {coachMessage ? `"${coachMessage}"` : '"Click the chat icon to generate a personalized review of your tasks."'}
+            </p>
+            <div className="flex gap-2">
+              <span className="px-2 py-1 bg-white dark:bg-white/5 rounded text-[10px] border border-slate-200 dark:border-white/5 text-slate-400">Personalized</span>
+              <span className="px-2 py-1 bg-white dark:bg-white/5 rounded text-[10px] border border-slate-200 dark:border-white/5 text-slate-400">Real-time</span>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      {/* Bottom Navigation Bar */}
+      <nav className="sticky bottom-0 bg-background-light/95 dark:bg-background-dark/95 backdrop-blur-xl border-t border-slate-200 dark:border-white/5 px-6 pb-8 pt-3 flex justify-around items-center">
+        <button 
+          onClick={() => setCurrentView('dashboard')}
+          className={`flex flex-col items-center gap-1 transition-colors ${currentView === 'dashboard' ? 'text-primary' : 'text-slate-400 dark:text-slate-500 hover:text-primary'}`}
+        >
+          <span className="material-symbols-outlined">grid_view</span>
+        </button>
+        <button 
+          onClick={() => setCurrentView('quiz')}
+          className={`flex flex-col items-center gap-1 transition-colors ${currentView === 'quiz' ? 'text-primary' : 'text-slate-400 dark:text-slate-500 hover:text-primary'}`}
+        >
+          <span className="material-symbols-outlined">quiz</span>
+        </button>
+      </nav>
     </div>
   );
 }

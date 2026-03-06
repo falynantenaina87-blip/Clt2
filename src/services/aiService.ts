@@ -20,87 +20,11 @@ if (imageKey) imageAi = new GoogleGenAI({ apiKey: imageKey });
 
 const modelId = "gemini-3-flash-preview";
 
-const systemInstruction = `
-You are an intelligent assistant for a personal tracking app called "Core Life Tracker".
-Your goal is to categorize user input into one of three categories: "studies", "sport", or "hobbies".
-
-Return a JSON object with the following structure:
-{
-  "category": "studies" | "sport" | "hobbies",
-  "action": "add",
-  "data": object
-}
-
-Specific data structures per category:
-
-1. For "studies":
-   "data": {
-     "text": string (the task description),
-     "priority": "low" | "medium" | "high" (infer priority if possible, default to medium)
-   }
-
-2. For "sport":
-   "data": {
-     "exercise": string (e.g., "Running", "Bench Press"),
-     "details": string (e.g., "40 mins", "3 sets of 10 reps"),
-     "intensity": "low" | "medium" | "high" (infer intensity, default to medium)
-   }
-
-3. For "hobbies":
-   If it's a wish/goal/item to buy:
-   "data": {
-     "type": "wishlist",
-     "text": string
-   }
-   If it's a general idea or project note:
-   "data": {
-     "type": "note",
-     "text": string
-   }
-
-Example Inputs & Outputs:
-Input: "Ran 5km in 30 mins hard"
-Output: { "category": "sport", "action": "add", "data": { "exercise": "Running", "details": "5km in 30 mins", "intensity": "high" } }
-
-Input: "Need to study for history exam"
-Output: { "category": "studies", "action": "add", "data": { "text": "Study for history exam", "priority": "high" } }
-
-Input: "I want to buy a new guitar"
-Output: { "category": "hobbies", "action": "add", "data": { "type": "wishlist", "text": "Buy a new guitar" } }
-
-Input: "Idea for a painting: sunset over the ocean"
-Output: { "category": "hobbies", "action": "add", "data": { "type": "note", "text": "Idea for a painting: sunset over the ocean" } }
-`;
-
-export async function parseLogInput(input: string): Promise<any> {
-  if (!mainAi) {
-    console.error("Gemini API key is missing. Cannot parse input.");
-    throw new Error("Gemini API key is missing");
-  }
-
-  try {
-    const response = await mainAi.models.generateContent({
-      model: modelId,
-      contents: input,
-      config: {
-        systemInstruction: systemInstruction,
-        responseMimeType: "application/json",
-      },
-    });
-
-    const text = response.text;
-    if (!text) return null;
-    return JSON.parse(text);
-  } catch (error) {
-    console.error("Error parsing log input:", error);
-    throw error;
-  }
-}
-
 export async function generateQuiz(topic: string): Promise<any> {
   if (!quizAi) throw new Error("Gemini API key is missing");
 
-  const prompt = `Create a 3-question multiple choice quiz about: "${topic}".
+  const prompt = `Create a 3-question multiple choice quiz based on these study topics/tasks: "${topic}".
+If the topics are vague, create general knowledge questions related to them.
 Return ONLY a JSON array of objects with this exact structure, nothing else:
 [
   {
@@ -192,10 +116,8 @@ Example: ["Read chapter 1", "Summarize key points", "Create flashcards"]`;
 export async function generateDailySummary(data: any): Promise<string> {
   if (!mainAi) throw new Error("Gemini API key is missing");
 
-  const prompt = `Act as a motivational AI coach. Here is the user's current data:
+  const prompt = `Act as a motivational AI coach. Here is the user's current study data:
 Studies: ${JSON.stringify(data.studies)}
-Sport: ${JSON.stringify(data.sport)}
-Hobbies: ${JSON.stringify(data.hobbies)}
 
 Write a short, encouraging 2-sentence summary of their progress and a tip for tomorrow. Keep it in French.`;
 
@@ -282,18 +204,4 @@ export function stopCoachAudio() {
     currentAudioSource.stop();
     currentAudioSource = null;
   }
-}
-
-export function getDateFromText(text: string): number {
-  const lowerText = text.toLowerCase();
-  const now = new Date();
-  
-  if (lowerText.includes('avant-hier')) {
-    now.setDate(now.getDate() - 2);
-  } else if (lowerText.includes('hier')) {
-    now.setDate(now.getDate() - 1);
-  }
-  // 'demain' could be handled here too if needed, but usually logs are for past/present
-  
-  return now.getTime();
 }
