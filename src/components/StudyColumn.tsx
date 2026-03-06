@@ -27,6 +27,7 @@ export const StudyColumn: React.FC<StudyColumnProps> = ({ tasks, savedQuizzes, o
   const [quizScore, setQuizScore] = useState(0);
   const [quizFinished, setQuizFinished] = useState(false);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
+  const [quizError, setQuizError] = useState<string | null>(null);
 
   // Task Breakdown State
   const [breakingDownTaskId, setBreakingDownTaskId] = useState<string | null>(null);
@@ -63,15 +64,19 @@ export const StudyColumn: React.FC<StudyColumnProps> = ({ tasks, savedQuizzes, o
     setCurrentQuestionIndex(0);
     setQuizScore(0);
     setSelectedAnswer(null);
+    setQuizError(null);
 
     try {
       const data = await generateQuiz(quizTopic);
       if (data && data.length > 0) {
         setQuizData(data);
         onSaveQuiz(quizTopic, data); // Save to history
+      } else {
+        setQuizError("L'IA n'a pas renvoyé de quiz valide. Veuillez réessayer.");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to generate quiz", error);
+      setQuizError("Erreur de connexion à l'IA. Si vous avez fait beaucoup de requêtes, attendez 1 minute (limite de 15/min).");
     } finally {
       setIsGeneratingQuiz(false);
     }
@@ -239,6 +244,12 @@ export const StudyColumn: React.FC<StudyColumnProps> = ({ tasks, savedQuizzes, o
                     >
                       Generate Quiz
                     </button>
+
+                    {quizError && (
+                      <div className="text-rose-400 text-sm bg-rose-500/10 p-3 rounded-lg border border-rose-500/20 mt-2">
+                        {quizError}
+                      </div>
+                    )}
 
                     {savedQuizzes && savedQuizzes.length > 0 && (
                       <div className="mt-6 border-t border-white/10 pt-4">
