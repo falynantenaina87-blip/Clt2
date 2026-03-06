@@ -1,19 +1,22 @@
 import { GoogleGenAI } from "@google/genai";
 
-// Use VITE_GEMINI_API_KEY. 
-// We avoid process.env here to prevent "process is not defined" errors in browser environments (Vercel).
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+// We support 3 separate keys to avoid rate limits.
+// If the specific keys aren't provided, it falls back to the main key.
+const mainKey = import.meta.env.VITE_GEMINI_API_KEY;
+const quizKey = import.meta.env.VITE_GEMINI_QUIZ_KEY || mainKey;
+const imageKey = import.meta.env.VITE_GEMINI_IMAGE_KEY || mainKey;
 
-if (!apiKey) {
-  console.error("VITE_GEMINI_API_KEY is missing. AI features will not work.");
+if (!mainKey) {
+  console.error("VITE_GEMINI_API_KEY is missing. Core AI features will not work.");
 }
 
-// Initialize safely. If no key, we can't make calls, but we shouldn't crash the app on load.
-// We'll handle the missing key in the function call.
-let ai: GoogleGenAI | null = null;
-if (apiKey) {
-  ai = new GoogleGenAI({ apiKey });
-}
+let mainAi: GoogleGenAI | null = null;
+let quizAi: GoogleGenAI | null = null;
+let imageAi: GoogleGenAI | null = null;
+
+if (mainKey) mainAi = new GoogleGenAI({ apiKey: mainKey });
+if (quizKey) quizAi = new GoogleGenAI({ apiKey: quizKey });
+if (imageKey) imageAi = new GoogleGenAI({ apiKey: imageKey });
 
 const modelId = "gemini-3-flash-preview";
 
@@ -70,13 +73,13 @@ Output: { "category": "hobbies", "action": "add", "data": { "type": "note", "tex
 `;
 
 export async function parseLogInput(input: string): Promise<any> {
-  if (!ai) {
+  if (!mainAi) {
     console.error("Gemini API key is missing. Cannot parse input.");
     throw new Error("Gemini API key is missing");
   }
 
   try {
-    const response = await ai.models.generateContent({
+    const response = await mainAi.models.generateContent({
       model: modelId,
       contents: input,
       config: {
@@ -95,7 +98,7 @@ export async function parseLogInput(input: string): Promise<any> {
 }
 
 export async function generateQuiz(topic: string): Promise<any> {
-  if (!ai) throw new Error("Gemini API key is missing");
+  if (!quizAi) throw new Error("Gemini API key is missing");
 
   const prompt = `Create a 3-question multiple choice quiz about: "${topic}".
 Return ONLY a JSON array of objects with this exact structure, nothing else:
@@ -108,7 +111,7 @@ Return ONLY a JSON array of objects with this exact structure, nothing else:
 ]`;
 
   try {
-    const response = await ai.models.generateContent({
+    const response = await quizAi.models.generateContent({
       model: modelId,
       contents: prompt,
       config: {
@@ -126,14 +129,14 @@ Return ONLY a JSON array of objects with this exact structure, nothing else:
 }
 
 export async function breakdownTask(task: string): Promise<string[]> {
-  if (!ai) throw new Error("Gemini API key is missing");
+  if (!quizAi) throw new Error("Gemini API key is missing");
 
   const prompt = `Break down this complex task into 3 to 5 simple, actionable subtasks: "${task}".
 Return ONLY a JSON array of strings, nothing else.
 Example: ["Read chapter 1", "Summarize key points", "Create flashcards"]`;
 
   try {
-    const response = await ai.models.generateContent({
+    const response = await quizAi.models.generateContent({
       model: modelId,
       contents: prompt,
       config: {
@@ -151,7 +154,7 @@ Example: ["Read chapter 1", "Summarize key points", "Create flashcards"]`;
 }
 
 export async function generateDailySummary(data: any): Promise<string> {
-  if (!ai) throw new Error("Gemini API key is missing");
+  if (!mainAi) throw new Error("Gemini API key is missing");
 
   const prompt = `Act as a motivational AI coach. Here is the user's current data:
 Studies: ${JSON.stringify(data.studies)}
@@ -161,7 +164,7 @@ Hobbies: ${JSON.stringify(data.hobbies)}
 Write a short, encouraging 2-sentence summary of their progress and a tip for tomorrow. Keep it in French.`;
 
   try {
-    const response = await ai.models.generateContent({
+    const response = await mainAi.models.generateContent({
       model: modelId,
       contents: prompt,
     });
@@ -173,10 +176,10 @@ Write a short, encouraging 2-sentence summary of their progress and a tip for to
 }
 
 export async function generateImage(prompt: string): Promise<string> {
-  if (!ai) throw new Error("Gemini API key is missing");
+  if (!imageAi) throw new Error("Gemini API key is missing");
 
   try {
-    const response = await ai.models.generateContent({
+    const response = await imageAi.models.generateContent({
       model: 'gemini-2.5-flash-image',
       contents: {
         parts: [
