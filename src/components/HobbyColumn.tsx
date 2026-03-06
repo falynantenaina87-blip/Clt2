@@ -46,7 +46,8 @@ export const HobbyColumn: React.FC<HobbyColumnProps> = ({
       setGeneratedImage(imgData);
     } catch (error: any) {
       console.error("Failed to generate image", error);
-      setImageError("Failed to generate image. Please try again or check your quota.");
+      // Display the actual error message from the service
+      setImageError(error.message || "Failed to generate image. Please try again.");
     } finally {
       setIsGeneratingImage(false);
     }
