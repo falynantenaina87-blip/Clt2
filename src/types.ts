@@ -28,10 +28,18 @@ export interface HobbyData {
   wishlist: WishlistItem[];
 }
 
+export interface SavedQuiz {
+  id: string;
+  topic: string;
+  questions: any[];
+  date: number;
+}
+
 export interface AppData {
   studies: StudyTask[];
   sport: WorkoutLog[];
   hobbies: HobbyData;
+  savedQuizzes: SavedQuiz[];
 }
 
 export const initialData: AppData = {
@@ -41,6 +49,7 @@ export const initialData: AppData = {
     notes: '',
     wishlist: [],
   },
+  savedQuizzes: [],
 };
 
 export function validateAppData(data: any): AppData {
@@ -49,6 +58,7 @@ export function validateAppData(data: any): AppData {
   const validStudies = Array.isArray(data.studies) ? data.studies : [];
   const validSport = Array.isArray(data.sport) ? data.sport : [];
   const validHobbies = (data.hobbies && typeof data.hobbies === 'object') ? data.hobbies : { notes: '', wishlist: [] };
+  const validSavedQuizzes = Array.isArray(data.savedQuizzes) ? data.savedQuizzes : [];
   
   // Ensure nested structures are correct
   if (typeof validHobbies.notes !== 'string') validHobbies.notes = '';
@@ -57,6 +67,7 @@ export function validateAppData(data: any): AppData {
   return {
     studies: validStudies,
     sport: validSport,
-    hobbies: validHobbies
+    hobbies: validHobbies,
+    savedQuizzes: validSavedQuizzes
   };
 }

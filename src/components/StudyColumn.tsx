@@ -6,12 +6,15 @@ import { generateQuiz, breakdownTask } from '../services/aiService';
 
 interface StudyColumnProps {
   tasks: StudyTask[];
+  savedQuizzes: any[];
   onAddTask: (text: string, priority: Priority) => void;
   onToggleTask: (id: string) => void;
   onDeleteTask: (id: string) => void;
+  onSaveQuiz: (topic: string, questions: any[]) => void;
+  onDeleteQuiz: (id: string) => void;
 }
 
-export const StudyColumn: React.FC<StudyColumnProps> = ({ tasks, onAddTask, onToggleTask, onDeleteTask }) => {
+export const StudyColumn: React.FC<StudyColumnProps> = ({ tasks, savedQuizzes, onAddTask, onToggleTask, onDeleteTask, onSaveQuiz, onDeleteQuiz }) => {
   const [newTaskText, setNewTaskText] = useState('');
   const [newTaskPriority, setNewTaskPriority] = useState<Priority>('medium');
   
@@ -65,12 +68,22 @@ export const StudyColumn: React.FC<StudyColumnProps> = ({ tasks, onAddTask, onTo
       const data = await generateQuiz(quizTopic);
       if (data && data.length > 0) {
         setQuizData(data);
+        onSaveQuiz(quizTopic, data); // Save to history
       }
     } catch (error) {
       console.error("Failed to generate quiz", error);
     } finally {
       setIsGeneratingQuiz(false);
     }
+  };
+
+  const handleReplayQuiz = (quiz: any) => {
+    setQuizTopic(quiz.topic);
+    setQuizData(quiz.questions);
+    setQuizFinished(false);
+    setCurrentQuestionIndex(0);
+    setQuizScore(0);
+    setSelectedAnswer(null);
   };
 
   const handleAnswer = (index: number) => {
@@ -193,106 +206,134 @@ export const StudyColumn: React.FC<StudyColumnProps> = ({ tasks, onAddTask, onTo
 
         {/* Quiz Modal Overlay */}
         {isQuizModalOpen && (
-          <div className="absolute inset-0 z-20 bg-[#0f172a]/95 backdrop-blur-md rounded-xl border border-white/10 flex flex-col p-4 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-white flex items-center gap-2">
-                <BrainCircuit className="text-indigo-400" size={20} />
-                AI Quiz Generator
-              </h3>
-              <button onClick={() => setIsQuizModalOpen(false)} className="text-white/50 hover:text-white">
-                <X size={20} />
-              </button>
-            </div>
-
-            {!quizData && !isGeneratingQuiz && (
-              <div className="flex flex-col gap-3 flex-1 justify-center">
-                <p className="text-sm text-white/60 text-center mb-2">
-                  Enter a topic you want to review, and AI will generate a quick 3-question quiz.
-                </p>
-                <input
-                  type="text"
-                  value={quizTopic}
-                  onChange={(e) => setQuizTopic(e.target.value)}
-                  placeholder="e.g., French Revolution, React Hooks..."
-                  className="bg-black/20 border border-white/10 rounded-lg px-3 py-3 text-white placeholder-white/30 focus:outline-none focus:border-indigo-500/50"
-                  autoFocus
-                />
-                <button
-                  onClick={handleGenerateQuiz}
-                  disabled={!quizTopic.trim()}
-                  className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-3 rounded-lg transition-colors"
-                >
-                  Generate Quiz
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <div className="bg-[#1e293b] border border-white/10 rounded-2xl w-full max-w-md p-6 shadow-2xl relative flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-200">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="font-bold text-white flex items-center gap-2 text-lg">
+                  <BrainCircuit className="text-indigo-400" size={24} />
+                  AI Quiz Generator
+                </h3>
+                <button onClick={() => setIsQuizModalOpen(false)} className="text-white/50 hover:text-white transition-colors">
+                  <X size={24} />
                 </button>
               </div>
-            )}
 
-            {isGeneratingQuiz && (
-              <div className="flex flex-col items-center justify-center flex-1 gap-4">
-                <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
-                <p className="text-sm text-indigo-300 animate-pulse">Crafting your quiz...</p>
-              </div>
-            )}
+              <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
+                {!quizData && !isGeneratingQuiz && (
+                  <div className="flex flex-col gap-4 justify-center py-4">
+                    <p className="text-sm text-white/60 text-center mb-2">
+                      Enter a topic you want to review, and AI will generate a quick 3-question quiz.
+                    </p>
+                    <input
+                      type="text"
+                      value={quizTopic}
+                      onChange={(e) => setQuizTopic(e.target.value)}
+                      placeholder="e.g., French Revolution, React Hooks..."
+                      className="bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/30 focus:outline-none focus:border-indigo-500/50"
+                      autoFocus
+                    />
+                    <button
+                      onClick={handleGenerateQuiz}
+                      disabled={!quizTopic.trim()}
+                      className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-3 rounded-xl transition-colors mt-2"
+                    >
+                      Generate Quiz
+                    </button>
 
-            {quizData && !quizFinished && (
-              <div className="flex flex-col flex-1">
-                <div className="flex justify-between text-xs text-white/50 mb-4 font-mono">
-                  <span>Question {currentQuestionIndex + 1} of {quizData.length}</span>
-                  <span>Score: {quizScore}</span>
-                </div>
-                
-                <p className="text-white font-medium mb-6 leading-relaxed">
-                  {quizData[currentQuestionIndex].question}
-                </p>
+                    {savedQuizzes && savedQuizzes.length > 0 && (
+                      <div className="mt-6 border-t border-white/10 pt-4">
+                        <h4 className="text-sm font-medium text-white/70 mb-3">Saved Quizzes</h4>
+                        <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar pr-1">
+                          {savedQuizzes.map(quiz => (
+                            <div key={quiz.id} className="flex items-center justify-between bg-white/5 p-3 rounded-lg hover:bg-white/10 transition-colors">
+                              <button 
+                                onClick={() => handleReplayQuiz(quiz)}
+                                className="flex-1 text-left text-sm text-white truncate"
+                              >
+                                {quiz.topic}
+                              </button>
+                              <button 
+                                onClick={() => onDeleteQuiz(quiz.id)}
+                                className="text-white/30 hover:text-rose-400 p-1"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
-                <div className="space-y-2 mt-auto">
-                  {quizData[currentQuestionIndex].options.map((opt: string, idx: number) => {
-                    const isSelected = selectedAnswer === idx;
-                    const isCorrect = idx === quizData[currentQuestionIndex].correctAnswerIndex;
-                    const showResult = selectedAnswer !== null;
+                {isGeneratingQuiz && (
+                  <div className="flex flex-col items-center justify-center py-12 gap-4">
+                    <div className="w-10 h-10 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+                    <p className="text-sm text-indigo-300 animate-pulse">Crafting your quiz...</p>
+                  </div>
+                )}
+
+                {quizData && !quizFinished && (
+                  <div className="flex flex-col">
+                    <div className="flex justify-between text-xs text-white/50 mb-6 font-mono bg-black/20 p-2 rounded-lg">
+                      <span>Question {currentQuestionIndex + 1} of {quizData.length}</span>
+                      <span>Score: {quizScore}</span>
+                    </div>
                     
-                    let btnClass = "bg-white/5 border-white/10 hover:bg-white/10 text-white/80";
-                    if (showResult) {
-                      if (isCorrect) btnClass = "bg-emerald-500/20 border-emerald-500/50 text-emerald-200";
-                      else if (isSelected) btnClass = "bg-rose-500/20 border-rose-500/50 text-rose-200";
-                      else btnClass = "bg-white/5 border-white/10 text-white/30 opacity-50";
-                    }
+                    <p className="text-white font-medium mb-8 leading-relaxed text-lg">
+                      {quizData[currentQuestionIndex].question}
+                    </p>
 
-                    return (
-                      <button
-                        key={idx}
-                        onClick={() => handleAnswer(idx)}
-                        disabled={showResult}
-                        className={`w-full text-left p-3 rounded-lg border transition-all text-sm ${btnClass}`}
-                      >
-                        {opt}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+                    <div className="space-y-3">
+                      {quizData[currentQuestionIndex].options.map((opt: string, idx: number) => {
+                        const isSelected = selectedAnswer === idx;
+                        const isCorrect = idx === quizData[currentQuestionIndex].correctAnswerIndex;
+                        const showResult = selectedAnswer !== null;
+                        
+                        let btnClass = "bg-white/5 border-white/10 hover:bg-white/10 text-white/80";
+                        if (showResult) {
+                          if (isCorrect) btnClass = "bg-emerald-500/20 border-emerald-500/50 text-emerald-200";
+                          else if (isSelected) btnClass = "bg-rose-500/20 border-rose-500/50 text-rose-200";
+                          else btnClass = "bg-white/5 border-white/10 text-white/30 opacity-50";
+                        }
 
-            {quizFinished && (
-              <div className="flex flex-col items-center justify-center flex-1 gap-4 text-center">
-                <div className="w-16 h-16 bg-indigo-500/20 rounded-full flex items-center justify-center mb-2">
-                  <span className="text-2xl font-bold text-indigo-300">{quizScore}/{quizData?.length}</span>
-                </div>
-                <h4 className="text-lg font-bold text-white">Quiz Complete!</h4>
-                <p className="text-sm text-white/60 mb-4">
-                  {quizScore === quizData?.length ? "Perfect score! You nailed it." : "Good effort! Keep studying."}
-                </p>
-                <button
-                  onClick={() => {
-                    setQuizData(null);
-                    setQuizTopic('');
-                  }}
-                  className="bg-white/10 hover:bg-white/20 text-white px-6 py-2 rounded-lg transition-colors text-sm font-medium"
-                >
-                  Try Another Topic
-                </button>
+                        return (
+                          <button
+                            key={idx}
+                            onClick={() => handleAnswer(idx)}
+                            disabled={showResult}
+                            className={`w-full text-left p-4 rounded-xl border transition-all text-sm ${btnClass}`}
+                          >
+                            {opt}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {quizFinished && (
+                  <div className="flex flex-col items-center justify-center py-8 gap-4 text-center">
+                    <div className="w-20 h-20 bg-indigo-500/20 rounded-full flex items-center justify-center mb-4">
+                      <span className="text-3xl font-bold text-indigo-300">{quizScore}/{quizData?.length}</span>
+                    </div>
+                    <h4 className="text-xl font-bold text-white">Quiz Complete!</h4>
+                    <p className="text-white/60 mb-6">
+                      {quizScore === quizData?.length ? "Perfect score! You nailed it." : "Good effort! Keep studying."}
+                    </p>
+                    <button
+                      onClick={() => {
+                        setQuizData(null);
+                        setQuizTopic('');
+                      }}
+                      className="bg-white/10 hover:bg-white/20 text-white px-8 py-3 rounded-xl transition-colors font-medium w-full"
+                    >
+                      Try Another Topic
+                    </button>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
           </div>
         )}
       </div>

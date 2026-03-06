@@ -172,6 +172,33 @@ Write a short, encouraging 2-sentence summary of their progress and a tip for to
   }
 }
 
+export async function generateImage(prompt: string): Promise<string> {
+  if (!ai) throw new Error("Gemini API key is missing");
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash-image',
+      contents: {
+        parts: [
+          {
+            text: prompt,
+          },
+        ],
+      },
+    });
+
+    for (const part of response.candidates?.[0]?.content?.parts || []) {
+      if (part.inlineData) {
+        return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+      }
+    }
+    throw new Error("No image generated");
+  } catch (error) {
+    console.error("Error generating image:", error);
+    throw error;
+  }
+}
+
 export function getDateFromText(text: string): number {
   const lowerText = text.toLowerCase();
   const now = new Date();

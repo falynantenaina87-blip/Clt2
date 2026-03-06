@@ -156,22 +156,6 @@ function App() {
     }
 
     const { category, data: itemData } = result;
-    // Determine date based on input text if available in itemData (not currently passed)
-    // But we can infer it from the raw input if we had it, or just use current time.
-    // Ideally QuickLog should pass rawInput to handleAiAction.
-    // For now, we'll use the date logic on the itemData text if possible, or just current date.
-    // Actually, let's assume the date logic is applied to the raw input in QuickLog or here.
-    // QuickLog calls onAiAction(result). We need to change QuickLog to pass rawInput.
-    
-    // However, since I can't easily change QuickLog signature without editing it too, 
-    // I'll rely on the fact that I can edit QuickLog.tsx as well.
-    // Wait, I am editing App.tsx. I should update QuickLog.tsx to pass rawInput.
-    
-    // Let's assume for now we use the text inside itemData to check for date keywords
-    // or we update QuickLog.tsx in the next step.
-    
-    // Actually, I'll update QuickLog.tsx to pass the raw input to this handler.
-    
     const date = rawInput ? getDateFromText(rawInput) : Date.now();
 
     if (category === 'studies') {
@@ -192,6 +176,24 @@ function App() {
         updateNotes(data.hobbies.notes + newNote);
       }
     }
+  };
+
+  // --- Quiz Handlers ---
+  const saveQuiz = (topic: string, questions: any[]) => {
+    setData(prev => ({
+      ...prev,
+      savedQuizzes: [
+        { id: crypto.randomUUID(), topic, questions, date: Date.now() },
+        ...(prev.savedQuizzes || [])
+      ]
+    }));
+  };
+
+  const deleteQuiz = (id: string) => {
+    setData(prev => ({
+      ...prev,
+      savedQuizzes: (prev.savedQuizzes || []).filter(q => q.id !== id)
+    }));
   };
 
   return (
@@ -247,9 +249,12 @@ function App() {
         <div className="flex-1 lg:min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-6 pb-24 lg:pb-6">
           <StudyColumn 
             tasks={data.studies} 
+            savedQuizzes={data.savedQuizzes || []}
             onAddTask={(text, priority) => addStudyTask(text, priority)} 
             onToggleTask={toggleStudyTask} 
             onDeleteTask={deleteStudyTask} 
+            onSaveQuiz={saveQuiz}
+            onDeleteQuiz={deleteQuiz}
           />
           <SportColumn 
             logs={data.sport} 
