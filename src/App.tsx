@@ -5,8 +5,8 @@ import { SportColumn } from './components/SportColumn';
 import { HobbyColumn } from './components/HobbyColumn';
 import { QuickLog } from './components/QuickLog';
 import { DataControls } from './components/DataControls';
-import { LayoutGrid, AlertCircle, Sparkles, X } from 'lucide-react';
-import { getDateFromText, generateDailySummary } from './services/aiService';
+import { LayoutGrid, AlertCircle, Sparkles, X, Volume2, Loader2, Square } from 'lucide-react';
+import { getDateFromText, generateDailySummary, generateCoachAudio, playCoachAudio, stopCoachAudio } from './services/aiService';
 
 function App() {
   const [data, setData] = useState<AppData>(() => {
@@ -28,6 +28,8 @@ function App() {
   const [isCoachModalOpen, setIsCoachModalOpen] = useState(false);
   const [coachMessage, setCoachMessage] = useState<string | null>(null);
   const [isGeneratingCoach, setIsGeneratingCoach] = useState(false);
+  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+  const [isAudioLoading, setIsAudioLoading] = useState(false);
 
   useEffect(() => {
     try {
@@ -44,6 +46,35 @@ function App() {
       return () => clearTimeout(timer);
     }
   }, [toastMessage]);
+
+  // Stop audio when modal closes
+  useEffect(() => {
+    if (!isCoachModalOpen) {
+      stopCoachAudio();
+      setIsAudioPlaying(false);
+    }
+  }, [isCoachModalOpen]);
+
+  const handlePlayAudio = async () => {
+    if (isAudioPlaying) {
+      stopCoachAudio();
+      setIsAudioPlaying(false);
+      return;
+    }
+    
+    if (!coachMessage) return;
+    setIsAudioLoading(true);
+    try {
+      const audioBase64 = await generateCoachAudio(coachMessage);
+      setIsAudioLoading(false);
+      setIsAudioPlaying(true);
+      playCoachAudio(audioBase64, () => setIsAudioPlaying(false));
+    } catch (error) {
+      console.error(error);
+      setIsAudioLoading(false);
+      setToastMessage("Erreur lors de la génération de l'audio. Vérifiez votre quota.");
+    }
+  };
 
   const handleGetCoachSummary = async () => {
     setIsCoachModalOpen(true);
@@ -302,13 +333,28 @@ function App() {
               </div>
             )}
             
-            {!isGeneratingCoach && (
-              <button 
-                onClick={() => setIsCoachModalOpen(false)}
-                className="mt-8 w-full bg-white/10 hover:bg-white/20 text-white font-medium py-3 rounded-xl transition-colors"
-              >
-                Fermer
-              </button>
+            {!isGeneratingCoach && coachMessage && (
+              <div className="mt-8 flex flex-col gap-3">
+                <button 
+                  onClick={handlePlayAudio}
+                  disabled={isAudioLoading}
+                  className="w-full flex items-center justify-center gap-2 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 font-medium py-3 rounded-xl transition-colors"
+                >
+                  {isAudioLoading ? (
+                    <><Loader2 size={18} className="animate-spin" /> Génération de la voix...</>
+                  ) : isAudioPlaying ? (
+                    <><Square size={18} className="fill-current" /> Arrêter la lecture</>
+                  ) : (
+                    <><Volume2 size={18} /> Écouter le bilan</>
+                  )}
+                </button>
+                <button 
+                  onClick={() => setIsCoachModalOpen(false)}
+                  className="w-full bg-white/10 hover:bg-white/20 text-white font-medium py-3 rounded-xl transition-colors"
+                >
+                  Fermer
+                </button>
+              </div>
             )}
           </div>
         </div>

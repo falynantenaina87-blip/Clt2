@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { StudyTask, Priority } from '../types';
 import { PomodoroTimer } from './PomodoroTimer';
-import { CheckCircle2, Circle, Trash2, Plus, Wand2, BrainCircuit, X } from 'lucide-react';
-import { generateQuiz, breakdownTask } from '../services/aiService';
+import { CheckCircle2, Circle, Trash2, Plus, Wand2, BrainCircuit, X, Camera } from 'lucide-react';
+import { generateQuiz, breakdownTask, generateQuizFromImage } from '../services/aiService';
 
 interface StudyColumnProps {
   tasks: StudyTask[];
@@ -79,6 +79,45 @@ export const StudyColumn: React.FC<StudyColumnProps> = ({ tasks, savedQuizzes, o
       setQuizError("Erreur de connexion à l'IA. Si vous avez fait beaucoup de requêtes, attendez 1 minute (limite de 15/min).");
     } finally {
       setIsGeneratingQuiz(false);
+    }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsGeneratingQuiz(true);
+    setQuizData(null);
+    setQuizFinished(false);
+    setCurrentQuestionIndex(0);
+    setQuizScore(0);
+    setSelectedAnswer(null);
+    setQuizError(null);
+
+    try {
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64String = (reader.result as string).split(',')[1];
+        const mimeType = file.type;
+        try {
+          const data = await generateQuizFromImage(base64String, mimeType);
+          if (data && data.length > 0) {
+            setQuizData(data);
+            onSaveQuiz(`Quiz from Image (${new Date().toLocaleDateString()})`, data);
+          } else {
+            setQuizError("L'IA n'a pas pu générer de quiz à partir de cette image.");
+          }
+        } catch (err: any) {
+          console.error(err);
+          setQuizError("Erreur lors de l'analyse de l'image. Vérifiez votre quota.");
+        } finally {
+          setIsGeneratingQuiz(false);
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+       setIsGeneratingQuiz(false);
+       setQuizError("Erreur de lecture du fichier.");
     }
   };
 
@@ -238,13 +277,24 @@ export const StudyColumn: React.FC<StudyColumnProps> = ({ tasks, savedQuizzes, o
                     className="bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/30 focus:outline-none focus:border-indigo-500/50"
                     autoFocus
                   />
-                  <button
-                    onClick={handleGenerateQuiz}
-                    disabled={!quizTopic.trim()}
-                    className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-3 rounded-xl transition-colors mt-2"
-                  >
-                    Generate Quiz
-                  </button>
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      onClick={handleGenerateQuiz}
+                      disabled={!quizTopic.trim()}
+                      className="flex-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-3 rounded-xl transition-colors"
+                    >
+                      Generate Quiz
+                    </button>
+                    <label className="flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 text-white px-4 py-3 rounded-xl transition-colors cursor-pointer" title="Scan notes to generate quiz">
+                      <Camera size={20} />
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        className="hidden" 
+                        onChange={handleImageUpload}
+                      />
+                    </label>
+                  </div>
 
                   {quizError && (
                     <div className="text-rose-400 text-sm bg-rose-500/10 p-3 rounded-lg border border-rose-500/20 mt-2">
