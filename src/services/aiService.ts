@@ -15,7 +15,7 @@ if (apiKey) {
   ai = new GoogleGenAI({ apiKey });
 }
 
-const modelId = "gemini-1.5-flash";
+const modelId = "gemini-3-flash-preview";
 
 const systemInstruction = `
 You are an intelligent assistant for a personal tracking app called "Core Life Tracker".
