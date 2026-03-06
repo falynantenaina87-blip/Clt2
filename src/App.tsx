@@ -30,6 +30,19 @@ function App() {
   const [isGeneratingCoach, setIsGeneratingCoach] = useState(false);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const [isAudioLoading, setIsAudioLoading] = useState(false);
+  
+  // Splash Screen State
+  const [showSplash, setShowSplash] = useState(true);
+  const [isFading, setIsFading] = useState(false);
+
+  useEffect(() => {
+    const fadeTimer = setTimeout(() => setIsFading(true), 2500);
+    const removeTimer = setTimeout(() => setShowSplash(false), 3000);
+    return () => {
+      clearTimeout(fadeTimer);
+      clearTimeout(removeTimer);
+    };
+  }, []);
 
   useEffect(() => {
     try {
@@ -229,6 +242,34 @@ function App() {
 
   return (
     <div className="min-h-screen bg-[#0f172a] text-white font-sans selection:bg-indigo-500/30">
+      {/* Splash Screen */}
+      {showSplash && (
+        <div className={`fixed inset-0 z-[9999] bg-[#0f172a] flex flex-col items-center justify-center transition-opacity duration-500 ${isFading ? 'opacity-0' : 'opacity-100'}`}>
+          <div className="relative flex flex-col items-center animate-in zoom-in duration-700">
+            <img
+              src="/intro.gif"
+              alt="App Intro"
+              className="w-48 h-48 object-contain mb-6 rounded-2xl shadow-2xl"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+                const fallback = document.getElementById('fallback-icon');
+                if (fallback) {
+                  fallback.classList.remove('hidden');
+                  fallback.classList.add('flex');
+                }
+              }}
+            />
+            <div id="fallback-icon" className="hidden flex-col items-center">
+              <div className="w-20 h-20 bg-indigo-500/20 rounded-full flex items-center justify-center mb-6 animate-pulse">
+                <Sparkles size={40} className="text-indigo-400" />
+              </div>
+            </div>
+            <h1 className="text-3xl font-bold text-white tracking-widest">CORE LIFE</h1>
+            <p className="text-indigo-400 mt-2 text-sm tracking-widest uppercase">Tracker</p>
+          </div>
+        </div>
+      )}
+
       {/* Background Gradients */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-900/20 rounded-full blur-[120px]"></div>

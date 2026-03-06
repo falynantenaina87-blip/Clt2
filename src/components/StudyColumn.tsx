@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StudyTask, Priority } from '../types';
 import { PomodoroTimer } from './PomodoroTimer';
 import { CheckCircle2, Circle, Trash2, Plus, Wand2, BrainCircuit, X, Camera } from 'lucide-react';
-import { generateQuiz, breakdownTask, generateQuizFromImage } from '../services/aiService';
+import { generateQuiz, breakdownTask, generateQuizFromImage, generateCoachAudio, playCoachAudio, stopCoachAudio } from '../services/aiService';
 
 interface StudyColumnProps {
   tasks: StudyTask[];
@@ -31,6 +31,40 @@ export const StudyColumn: React.FC<StudyColumnProps> = ({ tasks, savedQuizzes, o
 
   // Task Breakdown State
   const [breakingDownTaskId, setBreakingDownTaskId] = useState<string | null>(null);
+
+  // Stop audio when modal closes
+  useEffect(() => {
+    if (!isQuizModalOpen) {
+      stopCoachAudio();
+    }
+  }, [isQuizModalOpen]);
+
+  // Read question when it appears
+  useEffect(() => {
+    let isCancelled = false;
+    
+    if (isQuizModalOpen && quizData && !quizFinished && selectedAnswer === null) {
+      const questionText = quizData[currentQuestionIndex].question;
+      
+      const playQuestion = async () => {
+        try {
+          const audioBase64 = await generateCoachAudio(questionText);
+          if (!isCancelled && selectedAnswer === null) {
+            playCoachAudio(audioBase64);
+          }
+        } catch (e) {
+          console.error("Failed to read question", e);
+        }
+      };
+      
+      playQuestion();
+    }
+    
+    return () => {
+      isCancelled = true;
+      stopCoachAudio();
+    };
+  }, [currentQuestionIndex, quizData, quizFinished, selectedAnswer, isQuizModalOpen]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -130,21 +164,33 @@ export const StudyColumn: React.FC<StudyColumnProps> = ({ tasks, savedQuizzes, o
     setSelectedAnswer(null);
   };
 
-  const handleAnswer = (index: number) => {
+  const handleAnswer = async (index: number) => {
     if (selectedAnswer !== null || !quizData) return;
     setSelectedAnswer(index);
     
     const isCorrect = index === quizData[currentQuestionIndex].correctAnswerIndex;
     if (isCorrect) setQuizScore(s => s + 1);
 
-    setTimeout(() => {
+    const answerText = quizData[currentQuestionIndex].options[index];
+
+    const moveToNext = () => {
       if (currentQuestionIndex < quizData.length - 1) {
         setCurrentQuestionIndex(i => i + 1);
         setSelectedAnswer(null);
       } else {
         setQuizFinished(true);
       }
-    }, 1500);
+    };
+
+    try {
+      const audioBase64 = await generateCoachAudio(answerText);
+      playCoachAudio(audioBase64, () => {
+        setTimeout(moveToNext, 500); // Small pause after reading before moving to next
+      });
+    } catch (e) {
+      console.error("Failed to read answer", e);
+      setTimeout(moveToNext, 1500);
+    }
   };
 
   const getPriorityColor = (priority: Priority) => {
