@@ -94,6 +94,84 @@ export async function parseLogInput(input: string): Promise<any> {
   }
 }
 
+export async function generateQuiz(topic: string): Promise<any> {
+  if (!ai) throw new Error("Gemini API key is missing");
+
+  const prompt = `Create a 3-question multiple choice quiz about: "${topic}".
+Return ONLY a JSON array of objects with this exact structure, nothing else:
+[
+  {
+    "question": "The question text",
+    "options": ["Option A", "Option B", "Option C", "Option D"],
+    "correctAnswerIndex": 0
+  }
+]`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: modelId,
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+      },
+    });
+
+    const text = response.text;
+    if (!text) return [];
+    return JSON.parse(text);
+  } catch (error) {
+    console.error("Error generating quiz:", error);
+    throw error;
+  }
+}
+
+export async function breakdownTask(task: string): Promise<string[]> {
+  if (!ai) throw new Error("Gemini API key is missing");
+
+  const prompt = `Break down this complex task into 3 to 5 simple, actionable subtasks: "${task}".
+Return ONLY a JSON array of strings, nothing else.
+Example: ["Read chapter 1", "Summarize key points", "Create flashcards"]`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: modelId,
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+      },
+    });
+
+    const text = response.text;
+    if (!text) return [];
+    return JSON.parse(text);
+  } catch (error) {
+    console.error("Error breaking down task:", error);
+    throw error;
+  }
+}
+
+export async function generateDailySummary(data: any): Promise<string> {
+  if (!ai) throw new Error("Gemini API key is missing");
+
+  const prompt = `Act as a motivational AI coach. Here is the user's current data:
+Studies: ${JSON.stringify(data.studies)}
+Sport: ${JSON.stringify(data.sport)}
+Hobbies: ${JSON.stringify(data.hobbies)}
+
+Write a short, encouraging 2-sentence summary of their progress and a tip for tomorrow. Keep it in French.`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: modelId,
+      contents: prompt,
+    });
+    return response.text || "Continue comme ça !";
+  } catch (error) {
+    console.error("Error generating summary:", error);
+    throw error;
+  }
+}
+
 export function getDateFromText(text: string): number {
   const lowerText = text.toLowerCase();
   const now = new Date();
