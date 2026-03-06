@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AppData, initialData, Priority, validateAppData } from './types';
 import { AlertCircle, Sparkles, X, Loader2 } from 'lucide-react';
 import { generateDailySummary, generateCoachAudio, playCoachAudio, stopCoachAudio } from './services/aiService';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 function App() {
   const [data, setData] = useState<AppData>(() => {
@@ -127,6 +128,8 @@ function App() {
   const [currentView, setCurrentView] = useState<'dashboard' | 'quiz'>('dashboard');
 
   // --- Quiz State ---
+  const [quizTheme, setQuizTheme] = useState('');
+  const [quizQuestionCount, setQuizQuestionCount] = useState(3);
   const [quizQuestions, setQuizQuestions] = useState<any[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
@@ -148,7 +151,7 @@ function App() {
 
   const handleStartQuiz = async () => {
     const activeTasks = data.studies.filter(t => !t.completed).map(t => t.text).join(", ");
-    const topic = activeTasks || "General Knowledge";
+    const topic = quizTheme.trim() || activeTasks || "General Knowledge";
     
     setCurrentView('quiz');
     setIsGeneratingQuiz(true);
@@ -161,7 +164,7 @@ function App() {
 
     try {
       const { generateQuiz } = await import('./services/aiService');
-      const questions = await generateQuiz(topic);
+      const questions = await generateQuiz(topic, quizQuestionCount);
       setQuizQuestions(questions);
       if (questions.length > 0) {
         playQuestionAudio(questions[0]);
@@ -180,7 +183,8 @@ function App() {
     setSelectedAnswer(index);
     const correct = index === quizQuestions[currentQuestionIndex].correctAnswerIndex;
     setIsCorrect(correct);
-    if (correct) setScore(s => s + 1);
+    const newScore = correct ? score + 1 : score;
+    if (correct) setScore(newScore);
 
     setTimeout(() => {
       if (currentQuestionIndex < quizQuestions.length - 1) {
@@ -190,6 +194,24 @@ function App() {
         playQuestionAudio(quizQuestions[currentQuestionIndex + 1]);
       } else {
         setQuizFinished(true);
+        
+        // Save quiz result
+        const activeTasks = data.studies.filter(t => !t.completed).map(t => t.text).join(", ");
+        const topic = quizTheme.trim() || activeTasks || "General Knowledge";
+        
+        setData(prev => ({
+          ...prev,
+          quizHistory: [
+            ...prev.quizHistory,
+            {
+              id: crypto.randomUUID(),
+              topic: topic,
+              score: newScore,
+              totalQuestions: quizQuestions.length,
+              date: Date.now()
+            }
+          ]
+        }));
       }
     }, 2000);
   };
@@ -505,9 +527,25 @@ function App() {
               <h3 className="text-xs font-semibold text-slate-400 dark:text-slate-500">Test Knowledge</h3>
               <span className="material-symbols-outlined text-[18px] text-primary">quiz</span>
             </div>
-            <div className="py-2">
-              <p className="text-2xl font-bold font-mono">Quiz</p>
-              <p className="text-[10px] text-slate-400 uppercase">AI Generated</p>
+            <div className="py-2 space-y-2">
+              <input
+                type="text"
+                value={quizTheme}
+                onChange={(e) => setQuizTheme(e.target.value)}
+                placeholder="Custom theme (optional)"
+                className="w-full bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-xs focus:ring-1 focus:ring-primary/50 outline-none"
+              />
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-slate-400 uppercase">Questions: {quizQuestionCount}</span>
+                <input
+                  type="range"
+                  min="1"
+                  max="10"
+                  value={quizQuestionCount}
+                  onChange={(e) => setQuizQuestionCount(parseInt(e.target.value))}
+                  className="w-24 h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer dark:bg-slate-700"
+                />
+              </div>
             </div>
             <button 
               onClick={handleStartQuiz}
@@ -517,6 +555,37 @@ function App() {
             </button>
           </div>
         </div>
+
+        {/* Quiz Results Chart */}
+        {data.quizHistory.length > 0 && (
+          <section className="bg-white dark:bg-white/[0.02] border border-slate-200 dark:border-white/5 rounded-xl p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">Quiz History</h3>
+            </div>
+            <div className="h-48 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={data.quizHistory.slice(-10)} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+                  <XAxis 
+                    dataKey="topic" 
+                    tick={{ fontSize: 10, fill: '#94a3b8' }} 
+                    tickFormatter={(value) => value.length > 10 ? value.substring(0, 10) + '...' : value}
+                  />
+                  <YAxis 
+                    tick={{ fontSize: 10, fill: '#94a3b8' }} 
+                    domain={[0, 'dataMax']} 
+                    allowDecimals={false}
+                  />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px', fontSize: '12px', color: '#f8fafc' }}
+                    formatter={(value: number, name: string, props: any) => [`${value} / ${props.payload.totalQuestions}`, 'Score']}
+                    labelFormatter={(label) => `Topic: ${label}`}
+                  />
+                  <Bar dataKey="score" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </section>
+        )}
 
         {/* AI Coach Section */}
         <section className="bg-primary/5 dark:bg-primary/10 border border-primary/20 rounded-xl p-4 space-y-4">

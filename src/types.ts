@@ -15,14 +15,24 @@ export interface SavedQuiz {
   date: number;
 }
 
+export interface QuizResult {
+  id: string;
+  topic: string;
+  score: number;
+  totalQuestions: number;
+  date: number;
+}
+
 export interface AppData {
   studies: StudyTask[];
   savedQuizzes: SavedQuiz[];
+  quizHistory: QuizResult[];
 }
 
 export const initialData: AppData = {
   studies: [],
   savedQuizzes: [],
+  quizHistory: [],
 };
 
 export function validateAppData(data: any): AppData {
@@ -30,9 +40,11 @@ export function validateAppData(data: any): AppData {
   
   const validStudies = Array.isArray(data.studies) ? data.studies : [];
   const validSavedQuizzes = Array.isArray(data.savedQuizzes) ? data.savedQuizzes : [];
+  const validQuizHistory = Array.isArray(data.quizHistory) ? data.quizHistory : [];
   
   return {
     studies: validStudies,
-    savedQuizzes: validSavedQuizzes
+    savedQuizzes: validSavedQuizzes,
+    quizHistory: validQuizHistory
   };
 }

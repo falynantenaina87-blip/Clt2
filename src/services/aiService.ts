@@ -20,10 +20,10 @@ if (imageKey) imageAi = new GoogleGenAI({ apiKey: imageKey });
 
 const modelId = "gemini-3-flash-preview";
 
-export async function generateQuiz(topic: string): Promise<any> {
+export async function generateQuiz(topic: string, numQuestions: number = 3): Promise<any> {
   if (!quizAi) throw new Error("Gemini API key is missing");
 
-  const prompt = `Create a 3-question multiple choice quiz based on these study topics/tasks: "${topic}".
+  const prompt = `Create a ${numQuestions}-question multiple choice quiz based on these study topics/tasks: "${topic}".
 If the topics are vague, create general knowledge questions related to them.
 Return ONLY a JSON array of objects with this exact structure, nothing else:
 [
